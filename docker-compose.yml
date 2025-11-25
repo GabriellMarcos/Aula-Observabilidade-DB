@@ -1,0 +1,102 @@
+version: "3.8"
+
+services:
+
+  postgres:
+    image: postgres:15
+    container_name: obs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: observabilidade
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - obs-net
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: obs-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://admin:admin123@postgres:5432/observabilidade?sslmode=disable"
+    expose:
+      - "9187"
+    networks:
+      - obs-net
+    depends_on:
+      - postgres
+
+  node-exporter:
+    image: prom/node-exporter:1.7.0
+    container_name: obs-node-exporter
+    restart: unless-stopped
+    expose:
+      - "9100"
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - obs-net
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: obs-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    expose:
+      - "9090"
+    networks:
+      - obs-net
+    depends_on:
+      - node-exporter
+      - postgres-exporter
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: obs-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      # datasource provisioning will be used, but defaults are ok
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana:/etc/grafana/provisioning:ro
+    networks:
+      - obs-net
+    depends_on:
+      - prometheus
+
+  load-generator:
+    build: ./load-generator
+    container_name: obs-load-generator
+    restart: unless-stopped
+    networks:
+      - obs-net
+    depends_on:
+      - postgres
+
+  nginx:
+    build: ./nginx
+    container_name: obs-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    depends_on:
+      - grafana
+    networks:
+      - obs-net
+
+volumes:
+  pgdata:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  obs-net:
