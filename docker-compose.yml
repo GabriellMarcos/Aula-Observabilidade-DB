@@ -30,17 +30,13 @@ services:
       - postgres
 
   node-exporter:
-    image: prom/node-exporter:1.7.0
+    image: prom/node-exporter:latest
     container_name: obs-node-exporter
+    network_mode: "host"
+    pid: "host"
     restart: unless-stopped
-    expose:
-      - "9100"
     command:
-      - --path.rootfs=/host
-    volumes:
-      - /:/host:ro,rslave
-    networks:
-      - obs-net
+      - "--path.rootfs=/"
 
   prometheus:
     image: prom/prometheus:v2.51.2
@@ -61,10 +57,11 @@ services:
     image: grafana/grafana:10.4.0
     container_name: obs-grafana
     restart: unless-stopped
+    ports:
+      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      # datasource provisioning will be used, but defaults are ok
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana:/etc/grafana/provisioning:ro
